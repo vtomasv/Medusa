@@ -347,9 +347,6 @@ exec(''.join({} for c,k in zip(base64.b64decode({}), itertools.cycle({}))).encod
                 ))
 
             if self.get_parameter("output") == "exe":
-                if self.get_os() != SupportedOS.Windows:
-                    raise ValueError("EXE output is only supported when target OS is Windows")
-
                 await SendMythicRPCPayloadUpdatebuildStep(MythicRPCPayloadUpdateBuildStepMessage(
                     PayloadUUID=self.uuid,
                     StepName="Compiling to EXE",
