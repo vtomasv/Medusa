@@ -368,10 +368,25 @@ exec(''.join({} for c,k in zip(base64.b64decode({}), itertools.cycle({}))).encod
                     )
                     stdout, stderr = await process.communicate()
 
-                    if process.returncode != 0:
-                        raise Exception(f"PyInstaller failed: {stderr.decode()}")
+                    # Log stdout y stderr en Mythic para debug
+                    await SendMythicRPCPayloadUpdatebuildStep(MythicRPCPayloadUpdateBuildStepMessage(
+                        PayloadUUID=self.uuid,
+                        StepName="Compiling to EXE",
+                        StepStdout=f"PyInstaller Output:\n{stdout.decode()}\n{stderr.decode()}",
+                        StepSuccess=True
+                    ))
 
-                    exe_path = os.path.join(tmpdir, "agent.exe")
+                    if process.returncode != 0:
+                        raise Exception(f"PyInstaller failed with code {process.returncode}: {stderr.decode()}")
+
+                    # Buscar el archivo ejecutable generado (PyInstaller puede variar el nombre)
+                    generated_files = os.listdir(tmpdir)
+                    exe_file = next((f for f in generated_files if f.endswith(".exe") or f == "agent"), None)
+
+                    if not exe_file:
+                        raise Exception(f"PyInstaller completed but no executable was found in {tmpdir}. Files present: {generated_files}")
+
+                    exe_path = os.path.join(tmpdir, exe_file)
                     with open(exe_path, "rb") as f:
                         resp.payload = f.read()
 
